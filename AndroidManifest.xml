@@ -64,7 +64,7 @@
         </activity>
 
         <service android:name="com.seafile.seadroid2.TransferService"></service>
-
+        <service android:name="com.seafile.seadroid2.monitor.FileMonitorService"></service>
         <activity
             android:name="com.ipaulpro.afilechooser.FileChooserActivity"
             android:icon="@drawable/ic_chooser"

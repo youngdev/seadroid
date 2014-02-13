@@ -3,6 +3,7 @@ package com.seafile.seadroid2;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
@@ -47,6 +48,7 @@ import com.actionbarsherlock.view.Menu;
 import com.actionbarsherlock.view.MenuInflater;
 import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.Window;
+import com.seafile.seadroid2.monitor.FileMonitorService;
 
 import com.ipaulpro.afilechooser.FileChooserActivity;
 import com.ipaulpro.afilechooser.utils.FileUtils;
@@ -55,6 +57,7 @@ import com.seafile.seadroid2.TransferManager.UploadTaskInfo;
 import com.seafile.seadroid2.TransferService.TransferBinder;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.data.DataManager;
+import com.seafile.seadroid2.data.SeafCachedFile;
 import com.seafile.seadroid2.data.SeafDirent;
 import com.seafile.seadroid2.data.SeafRepo;
 import com.seafile.seadroid2.data.SeafStarredFile;
@@ -98,7 +101,30 @@ public class BrowserActivity extends SherlockFragmentActivity
     DataManager dataManager = null;
     TransferService txService = null;
     TransferReceiver mTransferReceiver;
+    FileMonitorService mMonitorService;
 
+    private HashMap<String, SeafCachedFile> cachedFileMap;
+    private BroadcastReceiver receiver = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+          
+          //Bundle bundle = intent.getExtras();
+          //if (bundle != null) {
+          //String path = bundle.getString(FileMonitorService.FILEPATH);
+          //SeafCachedFile modifiedFile = cachedFileMap.get(path);
+          //addUpdateTask(modifiedFile.repoID, modifiedFile.repoName, path.substring(0, path.lastIndexOf("/")), path);
+           if (mMonitorService != null) {
+               String path = mMonitorService.getPath();
+           
+               Toast.makeText(BrowserActivity.this,
+                "File modified. File name: " + path,
+                Toast.LENGTH_LONG).show();
+           }
+        }
+      };
+    
+    
     // private boolean twoPaneMode = false;
     UploadTasksFragment uploadTasksFragment = null;
     TabsFragment tabsFragment = null;
@@ -317,8 +343,29 @@ public class BrowserActivity extends SherlockFragmentActivity
         Intent bIntent = new Intent(this, TransferService.class);
         bindService(bIntent, mConnection, Context.BIND_AUTO_CREATE);
         Log.d(DEBUG_TAG, "try bind TransferService");
-
-
+        
+        List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
+        ArrayList<String> paths = new ArrayList<String>();
+        cachedFileMap = new HashMap<String, SeafCachedFile>();
+        cachedFileMap.clear();
+        String path;
+        for (SeafCachedFile cached : cachedfiles) {
+            path = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath();
+            paths.add(path);
+            cachedFileMap.put(path, cached);
+            Log.d("CachedFile", 
+                "repoDir="+dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath()+"\n"
+//                +"repoName="+cached.repoName+"\n"
+//                +"filePath="+cached.path+"\n"
+                +"account="+cached.getAccountSignature()
+                +"\n*********************************");
+        }
+        Intent monitorIntent = new Intent(this, FileMonitorService.class);
+        monitorIntent.putStringArrayListExtra(FileMonitorService.FILEPATH, paths);
+        startService(monitorIntent);
+        
+        Intent bindIntent = new Intent(this, FileMonitorService.class);
+        bindService(bindIntent, mMonitorConnection, Context.BIND_AUTO_CREATE);
     }
 
     private String getCurrentTabName() {
@@ -364,6 +411,23 @@ public class BrowserActivity extends SherlockFragmentActivity
         }
     };
 
+    private ServiceConnection mMonitorConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder binder) {
+            // TODO Auto-generated method stub
+            FileMonitorService.MonitorBinder monitorBinder = (FileMonitorService.MonitorBinder)binder;
+            mMonitorService = monitorBinder.getService();
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName className) {
+            // TODO Auto-generated method stub
+            mMonitorService = null;
+        }
+        
+    };
+    
     @Override
     public void onStart() {
         Log.d(DEBUG_TAG, "onStart");
@@ -373,8 +437,11 @@ public class BrowserActivity extends SherlockFragmentActivity
             mTransferReceiver = new TransferReceiver();
         }
 
+        registerReceiver(receiver, new IntentFilter(FileMonitorService.FILEMONITOR));
+        
         IntentFilter filter = new IntentFilter(TransferService.BROADCAST_ACTION);
         LocalBroadcastManager.getInstance(this).registerReceiver(mTransferReceiver, filter);
+        
     }
 
     @Override
@@ -395,7 +462,7 @@ public class BrowserActivity extends SherlockFragmentActivity
             startActivity(intent);
         }
     }
-
+    
     @Override
     protected void onStop() {
         Log.d(DEBUG_TAG, "onStop");
@@ -404,6 +471,7 @@ public class BrowserActivity extends SherlockFragmentActivity
         if (mTransferReceiver != null) {
             LocalBroadcastManager.getInstance(this).unregisterReceiver(mTransferReceiver);
         }
+        unregisterReceiver(receiver);
     }
 
     @Override
@@ -414,6 +482,11 @@ public class BrowserActivity extends SherlockFragmentActivity
             txService = null;
         }
 
+        if (mMonitorService != null) {
+            unbindService(mMonitorConnection);
+            mMonitorService = null;
+        }
+        
         super.onDestroy();
     }
 
