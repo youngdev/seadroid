@@ -73,6 +73,16 @@ public class AccountManager {
         db.close();
         return account;
     }
+    
+    public Account getAccountBySignature(String signature) {
+        List<Account> accounts = getAccountList();
+        for (int i = 0; i < accounts.size(); ++i) {
+            if (signature.equals(accounts.get(i).getSignature())) {
+                return accounts.get(i);
+            }
+        }
+        return null;
+    }
 
     public void saveAccount(Account account) {
         Account old = getAccount(account.server, account.email);
