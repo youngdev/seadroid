@@ -44,7 +44,7 @@ public class TransferService extends Service implements TransferListener {
     public static final String BROADCAST_FILE_UPLOAD_PROGRESS = "uploadProgress";
     public static final String BROADCAST_FILE_UPLOAD_CANCELLED = "uploadCancelled";
 
-    private BroadcastReceiver receiver = new BroadcastReceiver() {
+    private BroadcastReceiver monitorReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -82,7 +82,7 @@ public class TransferService extends Service implements TransferListener {
         txManager = new TransferManager();
         txManager.setListener(this);
         
-        registerReceiver(receiver, new IntentFilter(FileMonitorService.FILEMONITOR));
+        registerReceiver(monitorReceiver, new IntentFilter(FileMonitorService.FILEMONITOR));
     }
 
     @Override
@@ -90,7 +90,7 @@ public class TransferService extends Service implements TransferListener {
         Log.d(DEBUG_TAG, "onDestroy");
         txManager.unsetListener();
         unbindService(mMonitorConnection);
-        unregisterReceiver(receiver);
+        unregisterReceiver(monitorReceiver);
     }
 
     @Override

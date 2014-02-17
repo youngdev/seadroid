@@ -56,6 +56,7 @@ import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
 import com.seafile.seadroid2.TransferManager.UploadTaskInfo;
 import com.seafile.seadroid2.TransferService.TransferBinder;
 import com.seafile.seadroid2.account.Account;
+import com.seafile.seadroid2.account.AccountManager;
 import com.seafile.seadroid2.data.DataManager;
 import com.seafile.seadroid2.data.SeafCachedFile;
 import com.seafile.seadroid2.data.SeafDirent;
@@ -322,8 +323,9 @@ public class BrowserActivity extends SherlockFragmentActivity
         Log.d(DEBUG_TAG, "try bind TransferService");
         
         Intent monitorIntent = new Intent(this, FileMonitorService.class);
-        monitorIntent.putExtra(FileMonitorService.CURRENT_ACCOUNT, account);
-        //monitorIntent.putStringArrayListExtra(FileMonitorService.FILEPATH, paths);
+        AccountManager actmgr = new AccountManager(this);
+        ArrayList<Account> accounts = new ArrayList<Account>(actmgr.getAccountList());
+        monitorIntent.putParcelableArrayListExtra(FileMonitorService.ACCOUNTS, accounts);
         startService(monitorIntent);
     }
 

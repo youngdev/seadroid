@@ -31,6 +31,7 @@ import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
 import com.seafile.seadroid2.TransferService.TransferBinder;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.data.DataManager;
+import com.seafile.seadroid2.monitor.FileMonitorService;
 import com.seafile.seadroid2.ui.OpenAsDialog;
 import com.seafile.seadroid2.ui.PasswordDialog;
 import com.seafile.seadroid2.ui.TaskDialog;
@@ -232,6 +233,12 @@ public class FileActivity extends SherlockFragmentActivity {
         mProgressText.setVisibility(View.GONE);
         mButtonCancel.setVisibility(View.GONE);
         
+        Intent downloadedIntent = new Intent(FileMonitorService.DOWNLOADED);
+        String path = mDataManager.getLocalRepoFile(info.repoName, info.repoID, info.path).getPath();
+        downloadedIntent.putExtra(FileMonitorService.DOWNLOADED_PATH, path);
+        downloadedIntent.putExtra(FileMonitorService.DOWNLOADED_ACCOUNT, mAccount);
+        sendBroadcast(downloadedIntent);
+
         showFile();
     }
 
