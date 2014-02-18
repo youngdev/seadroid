@@ -141,6 +141,7 @@ public class AccountsActivity extends FragmentActivity {
         Intent intent = new Intent(this, AccountDetailActivity.class);
         intent.putExtra("server", account.server);
         intent.putExtra("email", account.email);
+        intent.putExtra("isEdited", true);
         startActivity(intent);
     }
 
