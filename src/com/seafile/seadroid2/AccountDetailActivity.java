@@ -159,10 +159,11 @@ public class AccountDetailActivity extends FragmentActivity {
         protected void onPostExecute(String result) {
             if (result != null && result.equals("Success")) {
                 if (isFromEdit) {
-                    accountManager.deleteAccount(account);
+                    accountManager.updateAccount(account, loginAccount);
                     isFromEdit = false;
-                }
-                accountManager.saveDefaultAccount(loginAccount);
+                } else {
+                    accountManager.saveDefaultAccount(loginAccount);
+                }     
                 startFilesActivity(loginAccount);
             } else {
                 if (err != null && err == SeafException.sslException) {
