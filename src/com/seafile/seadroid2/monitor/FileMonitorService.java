@@ -10,6 +10,7 @@ import java.util.Stack;
 import com.seafile.seadroid2.TransferManager;
 import com.seafile.seadroid2.TransferService;
 import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
+import com.seafile.seadroid2.Utils;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.data.DataManager;
 import com.seafile.seadroid2.data.SeafCachedFile;
@@ -59,7 +60,7 @@ public class FileMonitorService extends Service {
                 tmpCachedFile.path = info.path;
                 Account account = info.account;
                 DataManager dataManager = new DataManager(account);
-                Log.d("awwwwwwwwwwwww", account.email);
+                Log.d(LOG_TAG, account.email);
                 String path = dataManager.getLocalRepoFile(
                         tmpCachedFile.repoName, 
                         tmpCachedFile.repoID, 
@@ -95,7 +96,6 @@ public class FileMonitorService extends Service {
     
     @Override
     public IBinder onBind(Intent intent) {
-        // TODO Auto-generated method stub
         return null;
     }
     
@@ -117,7 +117,6 @@ public class FileMonitorService extends Service {
 
         @Override
         public void onServiceConnected(ComponentName className, IBinder binder) {
-            // TODO Auto-generated method stub
             TransferService.TransferBinder transferBinder = (TransferService.TransferBinder)binder;
             mTransferService = transferBinder.getService();
             LocalBroadcastManager.getInstance(FileMonitorService.this).registerReceiver(downloadReceiver, new IntentFilter(TransferService.BROADCAST_ACTION));
@@ -125,7 +124,6 @@ public class FileMonitorService extends Service {
 
         @Override
         public void onServiceDisconnected(ComponentName className) {
-            // TODO Auto-generated method stub
             mTransferService = null;
         }
         
@@ -165,17 +163,9 @@ public class FileMonitorService extends Service {
             return rootPath;
         }
         
-        private String relativePathToRepo(String filePath){
-            int index = filePath.lastIndexOf("/");
-            if (index == 0) {
-                return "/";
-            }
-            return filePath.substring(0, index);
-        }
         
         @Override
         public void onEvent(int event, String path) {
-            // TODO Auto-generated method stub
             switch (event) {
             case FileObserver.ACCESS:
                 Log.d(LOG_TAG, path + " was accessed!");
@@ -183,7 +173,7 @@ public class FileMonitorService extends Service {
             case FileObserver.MODIFY:
                 Log.d(LOG_TAG, rootPath + " was modified!");
                 if (mTransferService != null) {
-                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, relativePathToRepo(cachedFile.path), rootPath, true);
+                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, Utils.getParentPath(cachedFile.path), rootPath, true);
                 }       
                 break;
             default:
@@ -216,10 +206,6 @@ public class FileMonitorService extends Service {
             
         }
         
-//        public SeafileMonitor(ArrayList<String> paths) {
-//            this.paths = new ArrayList<String>(paths);
-//            observerList = new ArrayList<SeafileObserver>();
-//        }
 
         public SeafileMonitor(ArrayList<Account> accounts) {
             
@@ -234,12 +220,12 @@ public class FileMonitorService extends Service {
         public void setObserversFromAccount(Account account) {
             DataManager dataManager = new DataManager(account);
             List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
-            //ArrayList<String> paths = new ArrayList<String>();
             String path;
             for (SeafCachedFile cached : cachedfiles) {
-                path = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath();
-                
-                observerList.add(new SeafileObserver(account, cached, path));
+                File file = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path);
+                if (file.exists()) {
+                    observerList.add(new SeafileObserver(account, cached, file.getPath()));
+                }
                 
                 Log.d("MonitorCachedFile", 
                     "repoDir="+dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath()+"\n"
@@ -250,12 +236,6 @@ public class FileMonitorService extends Service {
             }
             
         }
-           
-//        public void init() {
-//            for (int i = 0; i < paths.size(); ++i) {
-//                observerList.add(new SeafileObserver(paths.get(i)));
-//            }
-//        }
         
 //        private void recursiveDirectory(String path) {
 //            
