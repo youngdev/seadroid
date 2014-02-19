@@ -32,7 +32,6 @@ public class TransferService extends Service implements TransferListener {
 
     private final IBinder mBinder = new TransferBinder();
     private TransferManager txManager;
-    private Account account;
     
     public static final String BROADCAST_FILE_DOWNLOAD_SUCCESS = "downloaded";
     public static final String BROADCAST_FILE_DOWNLOAD_FAILED = "downloadFailed";
@@ -85,7 +84,6 @@ public class TransferService extends Service implements TransferListener {
                                String repoName,
                                String repoID,
                                String path) {
-        this.account = account;
         return txManager.addDownloadTask(account, repoName, repoID, path);
     }
 
@@ -156,7 +154,6 @@ public class TransferService extends Service implements TransferListener {
     public void onFileDownloaded(int taskID) {
         Intent localIntent = new Intent(BROADCAST_ACTION).putExtra("type", BROADCAST_FILE_DOWNLOAD_SUCCESS)
             .putExtra("taskID", taskID);
-        localIntent.putExtra("account", account);
         LocalBroadcastManager.getInstance(this).sendBroadcast(localIntent);
     }
 

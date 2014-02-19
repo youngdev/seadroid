@@ -57,7 +57,7 @@ public class FileMonitorService extends Service {
                 tmpCachedFile.repoID = info.repoID;
                 tmpCachedFile.repoName = info.repoName;
                 tmpCachedFile.path = info.path;
-                Account account = intent.getParcelableExtra("account");
+                Account account = info.account;
                 DataManager dataManager = new DataManager(account);
                 Log.d("awwwwwwwwwwwww", account.email);
                 String path = dataManager.getLocalRepoFile(
