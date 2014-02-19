@@ -32,8 +32,7 @@ public class TransferService extends Service implements TransferListener {
 
     private final IBinder mBinder = new TransferBinder();
     private TransferManager txManager;
-    private FileMonitorService mMonitorService;
-    
+    private Account account;
     
     public static final String BROADCAST_FILE_DOWNLOAD_SUCCESS = "downloaded";
     public static final String BROADCAST_FILE_DOWNLOAD_FAILED = "downloadFailed";
@@ -44,60 +43,22 @@ public class TransferService extends Service implements TransferListener {
     public static final String BROADCAST_FILE_UPLOAD_PROGRESS = "uploadProgress";
     public static final String BROADCAST_FILE_UPLOAD_CANCELLED = "uploadCancelled";
 
-    private BroadcastReceiver monitorReceiver = new BroadcastReceiver() {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            
-           if (mMonitorService != null) {
-               Log.d(DEBUG_TAG, "RECEIVE MONITOR");
-               String path = mMonitorService.getPath();
-               Log.d(DEBUG_TAG, path);
-               Account account = mMonitorService.getAccount();
-               Log.d(DEBUG_TAG, account.getEmail());
-               DataManager dataManager = new DataManager(account);
-               
-               List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
-               for (SeafCachedFile cached : cachedfiles) {
-                   if (path.equals(dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath())) {
-                       Log.d(DEBUG_TAG, relativePathToRepo(cached.path));
-                       addUploadTask(account,cached.repoID, cached.repoName, relativePathToRepo(cached.path), path, true);
-                   }
-               }
-           }
-        }
-        
-        private String relativePathToRepo(String filePath){
-            int index = filePath.lastIndexOf("/");
-            if (index == 0) {
-                return "/";
-            }
-            return filePath.substring(0, index);
-        }
-        
-      };
-    
     @Override
     public void onCreate() {
         txManager = new TransferManager();
         txManager.setListener(this);
         
-        registerReceiver(monitorReceiver, new IntentFilter(FileMonitorService.FILEMONITOR));
     }
 
     @Override
     public void onDestroy() {
         Log.d(DEBUG_TAG, "onDestroy");
         txManager.unsetListener();
-        unbindService(mMonitorConnection);
-        unregisterReceiver(monitorReceiver);
+
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        
-        Intent bindIntent = new Intent(this, FileMonitorService.class);
-        bindService(bindIntent, mMonitorConnection, Context.BIND_AUTO_CREATE);
         
         return START_STICKY;
     }
@@ -114,23 +75,6 @@ public class TransferService extends Service implements TransferListener {
         return mBinder;
     }
 
-    private ServiceConnection mMonitorConnection = new ServiceConnection() {
-
-        @Override
-        public void onServiceConnected(ComponentName className, IBinder binder) {
-            // TODO Auto-generated method stub
-            FileMonitorService.MonitorBinder monitorBinder = (FileMonitorService.MonitorBinder)binder;
-            mMonitorService = monitorBinder.getService();
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName className) {
-            // TODO Auto-generated method stub
-            mMonitorService = null;
-        }
-        
-    };
-    
     
     public int addUploadTask(Account account, String repoID, String repoName, String dir,
                               String filePath, boolean isUpdate) {
@@ -141,6 +85,7 @@ public class TransferService extends Service implements TransferListener {
                                String repoName,
                                String repoID,
                                String path) {
+        this.account = account;
         return txManager.addDownloadTask(account, repoName, repoID, path);
     }
 
@@ -211,6 +156,7 @@ public class TransferService extends Service implements TransferListener {
     public void onFileDownloaded(int taskID) {
         Intent localIntent = new Intent(BROADCAST_ACTION).putExtra("type", BROADCAST_FILE_DOWNLOAD_SUCCESS)
             .putExtra("taskID", taskID);
+        localIntent.putExtra("account", account);
         LocalBroadcastManager.getInstance(this).sendBroadcast(localIntent);
     }
 

@@ -9,19 +9,23 @@ import java.util.Stack;
 
 import com.seafile.seadroid2.TransferManager;
 import com.seafile.seadroid2.TransferService;
+import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.data.DataManager;
 import com.seafile.seadroid2.data.SeafCachedFile;
 
 import android.app.Service;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.FileObserver;
 import android.os.IBinder;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 public class FileMonitorService extends Service {
@@ -30,28 +34,43 @@ public class FileMonitorService extends Service {
     public static final String FILEMONITOR = "com.seafile.seadroid2.monitor";
     public static final String FILEPATH = "filepath";
     public static final String ACCOUNTS = "com.seafile.seadroid2.monitor.accounts";
-    public static final String DOWNLOADED = "com.seafile.seadroid2.monitor.downloaded";
-    public static final String DOWNLOADED_PATH = "com.seafile.seadroid2.monitor.downloadedpath";
-    public static final String DOWNLOADED_ACCOUNT = "com.seafile.seadroid2.monitor.downloadedaccount";
     
-    private final IBinder mBinder = new MonitorBinder();
     private String fileChangedPath;
     private SeafileMonitor fileMonitor;
     private Account account;
+    private TransferService mTransferService;
     
     private BroadcastReceiver downloadReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
             
-           if (intent != null) {
-               Account account = intent.getParcelableExtra(DOWNLOADED_ACCOUNT);
-               String path = intent.getStringExtra(DOWNLOADED_PATH);
-               Log.d("DownloadedPath", path);
-               fileMonitor.addObserver(account, path);
-               fileMonitor.stopWatching();
-               fileMonitor.startWatching();
-           }
+            String type = intent.getStringExtra("type");
+            if (type == null) {
+                return;
+            }
+               
+            int taskID = intent.getIntExtra("taskID", 0);
+            DownloadTaskInfo info = mTransferService.getDownloadTaskInfo(taskID);
+            if (info != null) {
+                SeafCachedFile tmpCachedFile = new SeafCachedFile();
+                tmpCachedFile.repoID = info.repoID;
+                tmpCachedFile.repoName = info.repoName;
+                tmpCachedFile.path = info.path;
+                Account account = intent.getParcelableExtra("account");
+                DataManager dataManager = new DataManager(account);
+                Log.d("awwwwwwwwwwwww", account.email);
+                String path = dataManager.getLocalRepoFile(
+                        tmpCachedFile.repoName, 
+                        tmpCachedFile.repoID, 
+                        tmpCachedFile.path).getPath();
+                if (type.equals(TransferService.BROADCAST_FILE_DOWNLOAD_SUCCESS)) {
+                    fileMonitor.addObserver(account, tmpCachedFile, path);
+                    fileMonitor.stopWatching();
+                    fileMonitor.startWatching();
+                }
+            }
+               
         }
         
       };
@@ -61,38 +80,56 @@ public class FileMonitorService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId){
         Log.d(LOG_TAG, "onStartCommand called.");
+        
+        Intent bindIntent = new Intent(this, TransferService.class);
+        bindService(bindIntent, mTransferConnection, Context.BIND_AUTO_CREATE);
+        
         ArrayList<Account> accounts = intent.getParcelableArrayListExtra(ACCOUNTS);
         fileMonitor = new SeafileMonitor(accounts);
         fileMonitor.startWatching();
+        
         return START_STICKY;
         
     }
     
+    
     @Override
     public IBinder onBind(Intent intent) {
         // TODO Auto-generated method stub
-        Log.d(LOG_TAG, "Bind Service!");
-        return mBinder;
+        return null;
     }
     
     @Override
     public void onCreate() {
         Log.d(LOG_TAG, "onCreate");
-        registerReceiver(downloadReceiver, new IntentFilter(FileMonitorService.DOWNLOADED));
+        registerReceiver(downloadReceiver, new IntentFilter(TransferService.BROADCAST_ACTION));
     }
 
     @Override
     public void onDestroy() {
         Log.d(LOG_TAG, "onDestroy");
-        unregisterReceiver(downloadReceiver);
+        unbindService(mTransferConnection);
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(downloadReceiver);
     }
     
-    public class MonitorBinder extends Binder {
-        public FileMonitorService getService() {
-            return FileMonitorService.this;
+    
+    private ServiceConnection mTransferConnection = new ServiceConnection() {
+
+        @Override
+        public void onServiceConnected(ComponentName className, IBinder binder) {
+            // TODO Auto-generated method stub
+            TransferService.TransferBinder transferBinder = (TransferService.TransferBinder)binder;
+            mTransferService = transferBinder.getService();
+            LocalBroadcastManager.getInstance(FileMonitorService.this).registerReceiver(downloadReceiver, new IntentFilter(TransferService.BROADCAST_ACTION));
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName className) {
+            // TODO Auto-generated method stub
+            mTransferService = null;
         }
         
-    }
+    };
     
     public void setPath(String path) {
         fileChangedPath = path;
@@ -115,15 +152,25 @@ public class FileMonitorService extends Service {
         private final String LOG_TAG = "FILE_MONITOR";
         private String rootPath;
         private Account account;
+        private SeafCachedFile cachedFile;
         
-        public SeafileObserver(Account account, String path) {
+        public SeafileObserver(Account account, SeafCachedFile cachedFile, String path) {
             super(path, FileObserver.ALL_EVENTS);
             this.account = account;
+            this.cachedFile = cachedFile;
             rootPath = path;
         }
 
         public String getPath() {
             return rootPath;
+        }
+        
+        private String relativePathToRepo(String filePath){
+            int index = filePath.lastIndexOf("/");
+            if (index == 0) {
+                return "/";
+            }
+            return filePath.substring(0, index);
         }
         
         @Override
@@ -134,11 +181,10 @@ public class FileMonitorService extends Service {
                 Log.d(LOG_TAG, path + " was accessed!");
                 break;
             case FileObserver.MODIFY:
-                Intent intent = new Intent(FileMonitorService.FILEMONITOR);
                 Log.d(LOG_TAG, rootPath + " was modified!");
-                setPath(rootPath);
-                setAccount(account);
-                sendBroadcast(intent);         
+                if (mTransferService != null) {
+                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, relativePathToRepo(cachedFile.path), rootPath, true);
+                }       
                 break;
             default:
                 break;
@@ -188,21 +234,19 @@ public class FileMonitorService extends Service {
         public void setObserversFromAccount(Account account) {
             DataManager dataManager = new DataManager(account);
             List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
-            ArrayList<String> paths = new ArrayList<String>();
+            //ArrayList<String> paths = new ArrayList<String>();
             String path;
             for (SeafCachedFile cached : cachedfiles) {
                 path = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath();
-                //this.paths.add(path);
-                paths.add(path);
+                
+                observerList.add(new SeafileObserver(account, cached, path));
+                
                 Log.d("MonitorCachedFile", 
                     "repoDir="+dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath()+"\n"
                     +"repoName="+cached.repoName+"\n"
                     +"filePath="+cached.path+"\n"
                     +"account="+cached.getAccountSignature()
                     +"\n*********************************");
-            }
-            for (int i = 0; i < paths.size(); ++i) {
-                observerList.add(new SeafileObserver(account, paths.get(i)));
             }
             
         }
@@ -227,10 +271,10 @@ public class FileMonitorService extends Service {
 //            }
 //            
 //        }
+
         
-        
-        public void addObserver(Account account, String path) {
-            observerList.add(new SeafileObserver(account, path));
+        public void addObserver(Account account, SeafCachedFile cachedFile, String path) {
+            observerList.add(new SeafileObserver(account, cachedFile, path));
         }
         
         
