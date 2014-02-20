@@ -2,6 +2,7 @@ package com.seafile.seadroid2;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 
 import android.content.Context;
 import android.content.Intent;
@@ -20,6 +21,7 @@ import android.widget.TextView;
 
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.account.AccountManager;
+import com.seafile.seadroid2.monitor.FileMonitorService;
 
 
 public class AccountDetailActivity extends FragmentActivity {
