@@ -82,9 +82,6 @@ public class FileMonitorService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId){
         Log.d(LOG_TAG, "onStartCommand called.");
         
-        Intent bindIntent = new Intent(this, TransferService.class);
-        bindService(bindIntent, mTransferConnection, Context.BIND_AUTO_CREATE);
-            
         Account account = intent.getParcelableExtra(ACCOUNT);
         addAccount(account);
         
@@ -108,6 +105,10 @@ public class FileMonitorService extends Service {
     @Override
     public void onCreate() {
         Log.d(LOG_TAG, "onCreate");
+        
+        Intent bindIntent = new Intent(this, TransferService.class);
+        bindService(bindIntent, mTransferConnection, Context.BIND_AUTO_CREATE);
+        
         registerReceiver(downloadReceiver, new IntentFilter(TransferService.BROADCAST_ACTION));
     }
 
