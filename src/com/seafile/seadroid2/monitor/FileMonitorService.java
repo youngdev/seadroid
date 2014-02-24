@@ -292,7 +292,7 @@ public class FileMonitorService extends Service {
             
             int index = accounts.indexOf(account);
             if (index != -1) {
-                accounts.remove(accounts.indexOf(account));
+                accounts.remove(index);
             }
             
             startWatching();

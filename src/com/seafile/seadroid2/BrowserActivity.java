@@ -50,8 +50,6 @@ import com.actionbarsherlock.view.MenuItem;
 import com.actionbarsherlock.view.Window;
 import com.seafile.seadroid2.monitor.FileMonitorService;
 
-import com.ipaulpro.afilechooser.FileChooserActivity;
-import com.ipaulpro.afilechooser.utils.FileUtils;
 import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
 import com.seafile.seadroid2.TransferManager.UploadTaskInfo;
 import com.seafile.seadroid2.TransferService.TransferBinder;
@@ -62,6 +60,7 @@ import com.seafile.seadroid2.data.SeafCachedFile;
 import com.seafile.seadroid2.data.SeafDirent;
 import com.seafile.seadroid2.data.SeafRepo;
 import com.seafile.seadroid2.data.SeafStarredFile;
+import com.seafile.seadroid2.fileschooser.MultiFileChooserActivity;
 import com.seafile.seadroid2.gallery.MultipleImageSelectionActivity;
 import com.seafile.seadroid2.ui.ActivitiesFragment;
 import com.seafile.seadroid2.ui.AppChoiceDialog;
@@ -946,8 +945,9 @@ public class BrowserActivity extends SherlockFragmentActivity
 
     /***********  Start other activity  ***************/
 
-    public static final int PICK_FILE_REQUEST = 1;
+    public static final int PICK_FILES_REQUEST = 1;
     public static final int PICK_PHOTOS_VIDEOS_REQUEST = 2;
+    public static final int PICK_FILE_REQUEST = 3;
 
     public class UploadChoiceDialog extends DialogFragment {
         @Override
@@ -961,8 +961,8 @@ public class BrowserActivity extends SherlockFragmentActivity
                         public void onClick(DialogInterface dialog, int which) {
                             switch (which) {
                             case 0:
-                                Intent intent = new Intent(BrowserActivity.this, FileChooserActivity.class);
-                                getActivity().startActivityForResult(intent, PICK_FILE_REQUEST);
+                                Intent intent = new Intent(BrowserActivity.this, MultiFileChooserActivity.class);
+                                getActivity().startActivityForResult(intent, PICK_FILES_REQUEST);
                                 break;
                             case 1:
                                 // photos
@@ -971,7 +971,7 @@ public class BrowserActivity extends SherlockFragmentActivity
                                 break;
                             case 2:
                                 // thirdparty file chooser
-                                Intent target = FileUtils.createGetContentIntent();
+                                Intent target = Utils.createGetContentIntent();
                                 intent = Intent.createChooser(target, getString(R.string.choose_file));
                                 getActivity().startActivityForResult(intent, PICK_FILE_REQUEST);
                                 break;
@@ -1009,29 +1009,20 @@ public class BrowserActivity extends SherlockFragmentActivity
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == PICK_FILE_REQUEST) {
+        switch (requestCode) {
+        case PICK_FILES_REQUEST:
             if (resultCode == RESULT_OK) {
-                if (!Utils.isNetworkOn()) {
-                    showToast("Network is not connected");
+                String[] paths = data.getStringArrayExtra(MultiFileChooserActivity.MULTI_FILES_PATHS);
+                if (paths == null)
                     return;
-                }
-
-                Uri uri = data.getData();
-                String path;
-                try {
-                    path = FileUtils.getPath(this, uri);
-                } catch (URISyntaxException e) {
-                    e.printStackTrace();
-                    return;
-                }
                 showToast(getString(R.string.added_to_upload_tasks));
-                //showToast(getString(R.string.upload) + " " + Utils.fileNameFromPath(path));
-                addUploadTask(navContext.getRepoID(),
-                    navContext.getRepoName(), navContext.getDirPath(), path);
+                for (String path : paths) {
+                    addUploadTask(navContext.getRepoID(),
+                        navContext.getRepoName(), navContext.getDirPath(), path);
+                }
             }
-        }
-
-        if (requestCode == PICK_PHOTOS_VIDEOS_REQUEST) {
+            break;
+        case PICK_PHOTOS_VIDEOS_REQUEST:
             if (resultCode == RESULT_OK) {
                 ArrayList<String> paths = data.getStringArrayListExtra("photos");
                 if (paths == null)
@@ -1042,6 +1033,30 @@ public class BrowserActivity extends SherlockFragmentActivity
                         navContext.getRepoName(), navContext.getDirPath(), path);
                 }
             }
+            break;
+        case PICK_FILE_REQUEST:
+            if (resultCode == RESULT_OK) {
+                if (!Utils.isNetworkOn()) {
+                    showToast("Network is not connected");
+                    return;
+                }
+
+                Uri uri = data.getData();
+                String path;
+                try {
+                    path = Utils.getPath(this, uri);
+                } catch (URISyntaxException e) {
+                    e.printStackTrace();
+                    return;
+                }
+                showToast(getString(R.string.added_to_upload_tasks));
+                //showToast(getString(R.string.upload) + " " + Utils.fileNameFromPath(path));
+                addUploadTask(navContext.getRepoID(),
+                    navContext.getRepoName(), navContext.getDirPath(), path);
+            }
+            break;
+         default:
+             break;
         }
 
     }
