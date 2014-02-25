@@ -35,7 +35,7 @@ public class FileMonitorService extends Service {
     private static final String LOG_TAG = "FileMonitorService";
     public static final String FILEMONITOR = "com.seafile.seadroid2.monitor";
     public static final String FILEPATH = "filepath";
-    public static final String ACCOUNT = "com.seafile.seadroid2.monitor.account";
+    public static final String ACCOUNTS = "com.seafile.seadroid2.monitor.accounts";
     
 
     private SeafileMonitor fileMonitor = new SeafileMonitor();
@@ -82,8 +82,8 @@ public class FileMonitorService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId){
         Log.d(LOG_TAG, "onStartCommand called.");
         
-        Account account = intent.getParcelableExtra(ACCOUNT);
-        addAccount(account);
+        ArrayList<Account> accounts = intent.getParcelableArrayListExtra(ACCOUNTS);
+        addAccounts(accounts);
         
         return START_STICKY;
         
@@ -119,9 +119,11 @@ public class FileMonitorService extends Service {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(downloadReceiver);
     }
     
-    public void addAccount(Account account) {
-        Log.d(LOG_TAG, account.email);
-        fileMonitor.addAccount(account);
+    public void addAccounts(ArrayList<Account> accounts) {
+        for (int i = 0; i < accounts.size(); ++i) {
+            fileMonitor.addAccount(accounts.get(i));
+        }
+        
     }
     
     public void removeAccount(Account account) {
@@ -176,7 +178,7 @@ public class FileMonitorService extends Service {
         public void onEvent(int event, String path) {
             switch (event) {
             case FileObserver.ACCESS:
-                Log.d(LOG_TAG, path + " was accessed!");
+                Log.d(LOG_TAG, rootPath + " was accessed!");
                 break;
             case FileObserver.MODIFY:
                 Log.d(LOG_TAG, rootPath + " was modified!");
@@ -206,14 +208,11 @@ public class FileMonitorService extends Service {
     public class SeafileMonitor {
         
         private ArrayList<SeafileObserver> observerList;
-        private ArrayList<Account> accounts;
+        private Map<Account, List<SeafileObserver>> observerMap;
         private String rootPath;
-        private ArrayList<String> paths;
-        private boolean watching = false;
         
         public SeafileMonitor() {
-            observerList = new ArrayList<SeafileObserver>();
-            accounts = new ArrayList<Account>();
+            observerMap = new HashMap<Account, List<SeafileObserver>>();
         }
         
         public SeafileMonitor(String path) {
@@ -227,25 +226,17 @@ public class FileMonitorService extends Service {
             
         }
         
-
-        public SeafileMonitor(ArrayList<Account> accounts) {
-            
-            observerList = new ArrayList<SeafileObserver>();
-            
-            for (int i = 0; i < accounts.size(); ++i) {
-                setObserversFromAccount(accounts.get(i));
-            }
-            
-        }
-        
         public void setObserversFromAccount(Account account) {
             DataManager dataManager = new DataManager(account);
             List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
-            String path;
+            List<SeafileObserver> observerList = new ArrayList<SeafileObserver>();
+            SeafileObserver observer;
             for (SeafCachedFile cached : cachedfiles) {
                 File file = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path);
                 if (file.exists()) {
-                    observerList.add(new SeafileObserver(account, cached, file.getPath()));
+                    observer = new SeafileObserver(account, cached, file.getPath());
+                    observer.startWatching();
+                    observerList.add(observer);
                 }
                 
                 Log.d("MonitorCachedFile", 
@@ -255,6 +246,8 @@ public class FileMonitorService extends Service {
                     +"account="+cached.getAccountSignature()
                     +"\n*********************************");
             }
+            
+            observerMap.put(account, observerList);
             
         }
         
@@ -275,76 +268,32 @@ public class FileMonitorService extends Service {
 
         
         public void addAccount(Account account) {
-            if (accounts.contains(account)) {
+            if (observerMap.containsKey(account)) {
                 return;
             }
             setObserversFromAccount(account);
-            accounts.add(account);
-            startWatching();     
         }
         
         public void removeAccount(Account account) {
-            for (int i = 0; i < size(); ++i) {
-                if (account.equals(observerList.get(i).getAccount())) {
-                    observerList.remove(i);
-                }
+            
+            List<SeafileObserver> observerList = observerMap.get(account);
+            
+            for (int i = 0; i < observerList.size(); ++i) {
+                observerList.get(i).stopWatching();
             }
             
-            int index = accounts.indexOf(account);
-            if (index != -1) {
-                accounts.remove(index);
-            }
+            observerMap.remove(account);
             
-            startWatching();
         }
-        
-        private void setWatching(boolean watching) {
-            this.watching = watching;
-        }
-        
-        private boolean isWatching() {
-            return watching;
-        }
-        
+            
         public int size() {
-            return observerList.size();
+            return observerMap.size();
         }
         
         public void addObserver(Account account, SeafCachedFile cachedFile, String path) {
-            observerList.add(new SeafileObserver(account, cachedFile, path));
-            startWatching();
-        }
-        
-        
-        public void removeObserver(String path) {
-            for (int i = 0; i < observerList.size(); ++i) {
-                if (path.equals(observerList.get(i).getPath())) {
-                    observerList.remove(i);
-                }
-            }
-            startWatching();
-        }
-        
-        public void startWatching() {
-            
-            if (isWatching()) {
-                stopWatching();
-            }
-            for (int i = 0; i < observerList.size(); ++i) {          
-                observerList.get(i).startWatching();
-            }
-            setWatching(true);
-        }
-        
-        public void stopWatching() {
-            
-            if (!isWatching()) {
-                return;
-            } 
-            for (int i = 0; i < observerList.size(); ++i) {            
-                observerList.get(i).stopWatching();
-            }
-            setWatching(false);
+            SeafileObserver observer = new SeafileObserver(account, cachedFile, path);
+            observer.startWatching();
+            observerMap.get(account).add(observer);
         }
         
     }
