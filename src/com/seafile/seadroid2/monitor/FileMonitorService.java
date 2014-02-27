@@ -14,6 +14,7 @@ import com.seafile.seadroid2.TransferService;
 import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
 import com.seafile.seadroid2.Utils;
 import com.seafile.seadroid2.account.Account;
+import com.seafile.seadroid2.account.AccountManager;
 import com.seafile.seadroid2.data.DataManager;
 import com.seafile.seadroid2.data.SeafCachedFile;
 
@@ -76,7 +77,8 @@ public class FileMonitorService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId){
         Log.d(LOG_TAG, "onStartCommand called.");
         
-        ArrayList<Account> accounts = intent.getParcelableArrayListExtra(ACCOUNTS);
+        AccountManager actmgr = new AccountManager(this);
+        ArrayList<Account> accounts = new ArrayList<Account>(actmgr.getAccountList());
         addAccounts(accounts);
         fileMonitor.start();
         
