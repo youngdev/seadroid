@@ -235,7 +235,7 @@ public class DataManager {
      * "seafile.mycompany.com". Two repos, "Documents" and "Manuals", has
      * been viewed.
      */
-    private String getAccountDir() {
+    public String getAccountDir() {
 
         String username = account.getEmail();
         String server = Utils.stripSlashes(account.getServerHost());

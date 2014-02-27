@@ -5,12 +5,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Stack;
 
-import com.seafile.seadroid2.TransferManager;
+import org.apache.commons.io.monitor.FileAlterationListener;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
+
 import com.seafile.seadroid2.TransferService;
 import com.seafile.seadroid2.TransferManager.DownloadTaskInfo;
-import com.seafile.seadroid2.TransferService.TransferBinder;
 import com.seafile.seadroid2.Utils;
 import com.seafile.seadroid2.account.Account;
 import com.seafile.seadroid2.data.DataManager;
@@ -24,8 +25,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Binder;
-import android.os.Environment;
-import android.os.FileObserver;
 import android.os.IBinder;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
@@ -62,13 +61,8 @@ public class FileMonitorService extends Service {
                     tmpCachedFile.repoName = info.repoName;
                     tmpCachedFile.path = info.path;
                     Account account = info.account;
-                    DataManager dataManager = new DataManager(account);
                     Log.d(LOG_TAG, account.email);
-                    String path = dataManager.getLocalRepoFile(
-                            tmpCachedFile.repoName, 
-                            tmpCachedFile.repoID, 
-                            tmpCachedFile.path).getPath();
-                    fileMonitor.addObserver(account, tmpCachedFile, path);
+                    fileMonitor.getObserver(account).addToMap(tmpCachedFile);
                 }
             }
                       
@@ -84,6 +78,7 @@ public class FileMonitorService extends Service {
         
         ArrayList<Account> accounts = intent.getParcelableArrayListExtra(ACCOUNTS);
         addAccounts(accounts);
+        fileMonitor.start();
         
         return START_STICKY;
         
@@ -148,22 +143,45 @@ public class FileMonitorService extends Service {
     };
     
     
-    public class SeafileObserver extends FileObserver {
+    public class SeafileObserver implements FileAlterationListener {
 
-        private final String LOG_TAG = "FILE_MONITOR";
-        private String rootPath;
+        private final String LOG_TAG = "SeafileObserver";
         private Account account;
-        private SeafCachedFile cachedFile;
+        private Map<File, SeafCachedFile> fileMap;
+        private FileAlterationObserver alterationObserver;
         
-        public SeafileObserver(Account account, SeafCachedFile cachedFile, String path) {
-            super(path, FileObserver.ALL_EVENTS);
+        public SeafileObserver(Account account) {
             this.account = account;
-            this.cachedFile = cachedFile;
-            rootPath = path;
+            fileMap = new HashMap<File, SeafCachedFile>();
+            alterationObserver = new FileAlterationObserver(getAccountDir());
+            alterationObserver.addListener(this);
+            initFileMap();
         }
-
-        public String getPath() {
-            return rootPath;
+        
+        private String getAccountDir() {
+            DataManager dataManager = new DataManager(account);
+            return dataManager.getAccountDir();
+        }
+        
+        public FileAlterationObserver getAlterationObserver() {
+            return alterationObserver;
+        }
+        
+        private void initFileMap() {
+            DataManager dataManager = new DataManager(account);
+            List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
+            for (SeafCachedFile cached : cachedfiles) {
+                File file = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path);
+                if (file.exists()) {
+                    fileMap.put(file, cached);
+                }
+            }
+        }
+        
+        public void addToMap(SeafCachedFile cachedFile) {
+            DataManager dataManager = new DataManager(account);
+            File file = dataManager.getLocalRepoFile(cachedFile.repoName, cachedFile.repoID, cachedFile.path);
+            fileMap.put(file, cachedFile);
         }
         
         public void setAccount(Account account) {
@@ -174,81 +192,80 @@ public class FileMonitorService extends Service {
             return account;
         }
         
-        @Override
-        public void onEvent(int event, String path) {
-            switch (event) {
-            case FileObserver.ACCESS:
-                Log.d(LOG_TAG, rootPath + " was accessed!");
-                break;
-            case FileObserver.MODIFY:
-                Log.d(LOG_TAG, rootPath + " was modified!");
-//                if (mTransferService != null) {
-//                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, Utils.getParentPath(cachedFile.path), rootPath, true);
-//                }       
-                break;
-            case FileObserver.CLOSE_WRITE:
-                Log.d(LOG_TAG, rootPath + " was accessed for writing!");
-                if (mTransferService != null) {
-                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, Utils.getParentPath(cachedFile.path), rootPath, true);
-                }       
-                break;
-            default:
-                break;
-            
+        public void startWatching() {
+            try {
+                alterationObserver.initialize();
+            } catch (Exception e) {
+                
+            }
+            alterationObserver.checkAndNotify();
+        }
+        
+        public void stopWatching() {
+            try {
+                alterationObserver.destroy();
+            } catch (Exception e) {
+                
             }
         }
         
         @Override
-        protected void finalize() {
-            Log.d(LOG_TAG, "The "+rootPath+" Observer is collected.");
+        public void onDirectoryChange(File directory) {
+            Log.d(LOG_TAG, directory.getPath() + " was modified!");
         }
+
+        @Override
+        public void onDirectoryCreate(File directory) {
+            Log.d(LOG_TAG, directory.getPath() + " was created!");
+        }
+
+        @Override
+        public void onDirectoryDelete(File directory) {
+            Log.d(LOG_TAG, directory.getPath() + " was deleted!");
+        }
+
+        @Override
+        public void onFileChange(File file) {
+            Log.d(LOG_TAG, file.getPath() + " was modified!");
+            SeafCachedFile cachedFile = fileMap.get(file);
+            if (cachedFile != null) {
+                if (mTransferService != null) {
+                    mTransferService.addUploadTask(account,cachedFile.repoID, cachedFile.repoName, Utils.getParentPath(cachedFile.path), file.getPath(), true);
+                }
+            }
+        }
+
+        @Override
+        public void onFileCreate(File file) {
+            Log.d(LOG_TAG, file.getPath() + " was created!");
+        }
+
+        @Override
+        public void onFileDelete(File file) {
+            Log.d(LOG_TAG, file.getPath() + " was deleted!");
+        }
+
+        @Override
+        public void onStart(FileAlterationObserver fao) {
+            Log.d(LOG_TAG, fao.toString() + " start checking event!");
+        }
+
+        @Override
+        public void onStop(FileAlterationObserver fao) {
+            Log.d(LOG_TAG, fao.toString() + " finished checking event!");
+        }
+        
 
     }
     
     public class SeafileMonitor {
         
-        private ArrayList<SeafileObserver> observerList;
-        private Map<Account, List<SeafileObserver>> observerMap;
-        private String rootPath;
-        
+        private static final String LOG_TAG = "SeafileMonitor";
+        private Map<Account, SeafileObserver> observerMap;
+        private FileAlterationMonitor alterationMonitor;
         public SeafileMonitor() {
-            observerMap = new HashMap<Account, List<SeafileObserver>>();
-        }
-        
-        public SeafileMonitor(String path) {
-            rootPath = path;
-            observerList = new ArrayList<SeafileObserver>();
-        }
-        
-        public SeafileMonitor(Account account) {
-            observerList = new ArrayList<SeafileObserver>();
-            setObserversFromAccount(account);
-            
-        }
-        
-        public void setObserversFromAccount(Account account) {
-            DataManager dataManager = new DataManager(account);
-            List<SeafCachedFile> cachedfiles = dataManager.getCachedFiles();
-            List<SeafileObserver> observerList = new ArrayList<SeafileObserver>();
-            SeafileObserver observer;
-            for (SeafCachedFile cached : cachedfiles) {
-                File file = dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path);
-                if (file.exists()) {
-                    observer = new SeafileObserver(account, cached, file.getPath());
-                    observer.startWatching();
-                    observerList.add(observer);
-                }
-                
-                Log.d("MonitorCachedFile", 
-                    "repoDir="+dataManager.getLocalRepoFile(cached.repoName, cached.repoID, cached.path).getPath()+"\n"
-                    +"repoName="+cached.repoName+"\n"
-                    +"filePath="+cached.path+"\n"
-                    +"account="+cached.getAccountSignature()
-                    +"\n*********************************");
-            }
-            
-            observerMap.put(account, observerList);
-            
+            observerMap = new HashMap<Account, SeafileObserver>();
+            alterationMonitor = new FileAlterationMonitor();
         }
         
 //        private void recursiveDirectory(String path) {
@@ -271,29 +288,53 @@ public class FileMonitorService extends Service {
             if (observerMap.containsKey(account)) {
                 return;
             }
-            setObserversFromAccount(account);
+            SeafileObserver fileObserver = new SeafileObserver(account);
+            addObserver(fileObserver);
+            observerMap.put(account, fileObserver);
         }
         
         public void removeAccount(Account account) {
             
-            List<SeafileObserver> observerList = observerMap.get(account);
-            
-            for (int i = 0; i < observerList.size(); ++i) {
-                observerList.get(i).stopWatching();
-            }
-            
+            SeafileObserver fileObserver = observerMap.get(account);
+            removeObserver(fileObserver);
             observerMap.remove(account);
             
         }
             
+        public void addObserver(SeafileObserver fileObserver) {
+            
+            alterationMonitor.addObserver(fileObserver.getAlterationObserver());
+            
+        }
+        
+        public void removeObserver(SeafileObserver fileObserver) {
+            
+            alterationMonitor.removeObserver(fileObserver.getAlterationObserver());
+            
+        }
+        
+        public SeafileObserver getObserver(Account account) {
+            return observerMap.get(account);
+        }
+        
         public int size() {
             return observerMap.size();
         }
         
-        public void addObserver(Account account, SeafCachedFile cachedFile, String path) {
-            SeafileObserver observer = new SeafileObserver(account, cachedFile, path);
-            observer.startWatching();
-            observerMap.get(account).add(observer);
+        public void start() {
+            try {
+                alterationMonitor.start();
+            } catch (Exception e) {
+                Log.d(LOG_TAG, "File Monitor start failed.");
+            }
+        }
+        
+        public void stop() {
+            try {
+                alterationMonitor.stop();
+            } catch (Exception e) {
+                Log.d(LOG_TAG, "File Monitor stop failed.");
+            }
         }
         
     }
