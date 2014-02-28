@@ -60,7 +60,7 @@ public class TransferManager {
     /**
      * Add a new upload task
      */
-    public int addUploadTask(Account account, String repoID, String repoName,
+    public synchronized int addUploadTask(Account account, String repoID, String repoName,
                               String dir, String filePath, boolean isUpdate) {
         Iterator<UploadTask> iter = uploadTasks.iterator();
         while (iter.hasNext()) {

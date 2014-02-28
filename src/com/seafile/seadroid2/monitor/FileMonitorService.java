@@ -194,23 +194,6 @@ public class FileMonitorService extends Service {
             return account;
         }
         
-        public void startWatching() {
-            try {
-                alterationObserver.initialize();
-            } catch (Exception e) {
-                
-            }
-            alterationObserver.checkAndNotify();
-        }
-        
-        public void stopWatching() {
-            try {
-                alterationObserver.destroy();
-            } catch (Exception e) {
-                
-            }
-        }
-        
         @Override
         public void onDirectoryChange(File directory) {
             Log.d(LOG_TAG, directory.getPath() + " was modified!");
